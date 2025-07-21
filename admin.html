@@ -114,12 +114,16 @@
         }
 
         .post-form textarea,
-        .post-form input {
+        .post-form input[type="text"] {
             width: 100%;
             padding: 0.5rem;
             margin: 0.5rem 0;
             border: 1px solid #ddd;
             border-radius: 4px;
+        }
+
+        input[type="file"] {
+            margin: 0.5rem 0;
         }
 
         button {
@@ -177,6 +181,12 @@
                 <textarea id="postContent" rows="5" placeholder="Post Content (Markdown supported)"></textarea>
                 <button onclick="addPost()">Add Post</button>
             </div>
+        </section>
+
+        <section class="admin-section">
+            <h2>Sync Posts Across Devices</h2>
+            <button onclick="exportPosts()">Export Posts</button>
+            <input type="file" id="importPosts" accept=".json" onchange="importPosts(event)">
         </section>
 
         <section class="admin-section">
@@ -245,6 +255,48 @@
                 localStorage.setItem('blogPosts', JSON.stringify(posts));
                 loadPosts();
             }
+        }
+
+        // Export posts to a JSON file
+        function exportPosts() {
+            const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
+            const dataStr = JSON.stringify(posts, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'blogPosts.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Import posts from a JSON file
+        function importPosts(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/json') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const importedPosts = JSON.parse(e.target.result);
+                        if (Array.isArray(importedPosts)) {
+                            localStorage.setItem('blogPosts', JSON.stringify(importedPosts));
+                            loadPosts();
+                            alert('Posts imported successfully!');
+                        } else {
+                            alert('Invalid file format. Please upload a valid JSON file.');
+                        }
+                    } catch (error) {
+                        alert('Error importing posts: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            } else {
+                alert('Please select a valid JSON file.');
+            }
+            // Reset file input
+            document.getElementById('importPosts').value = '';
         }
 
         // Load posts on page load
