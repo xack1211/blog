@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -198,9 +159,27 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        // Load posts from localStorage
-        function loadPosts() {
-            const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
+        // Global posts array to store current posts
+        let posts = [];
+
+        // Load posts from blogPosts.json
+        async function loadPosts() {
+            try {
+                const response = await fetch('blogPosts.json');
+                if (response.ok) {
+                    posts = await response.json();
+                } else {
+                    posts = [];
+                }
+            } catch (error) {
+                console.warn('Failed to load blogPosts.json, starting with empty list:', error);
+                posts = [];
+            }
+            renderPosts();
+        }
+
+        // Render posts to the page
+        function renderPosts() {
             const postList = document.getElementById('postList');
             postList.innerHTML = '';
             posts.forEach((post, index) => {
@@ -225,12 +204,11 @@
             const title = document.getElementById('postTitle').value;
             const content = document.getElementById('postContent').value;
             if (title && content) {
-                const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
                 posts.push({ title, content });
-                localStorage.setItem('blogPosts', JSON.stringify(posts));
+                saveAndExportPosts();
                 document.getElementById('postTitle').value = '';
                 document.getElementById('postContent').value = '';
-                loadPosts();
+                renderPosts();
             } else {
                 alert('Please fill in both title and content.');
             }
@@ -238,29 +216,26 @@
 
         // Edit post
         function editPost(index) {
-            const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
             const newTitle = prompt('Edit title:', posts[index].title);
             const newContent = prompt('Edit content (Markdown supported):', posts[index].content);
             if (newTitle && newContent) {
                 posts[index] = { title: newTitle, content: newContent };
-                localStorage.setItem('blogPosts', JSON.stringify(posts));
-                loadPosts();
+                saveAndExportPosts();
+                renderPosts();
             }
         }
 
         // Delete post
         function deletePost(index) {
             if (confirm('Are you sure you want to delete this post?')) {
-                const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
                 posts.splice(index, 1);
-                localStorage.setItem('blogPosts', JSON.stringify(posts));
-                loadPosts();
+                saveAndExportPosts();
+                renderPosts();
             }
         }
 
         // Export posts to a JSON file
         function exportPosts() {
-            const posts = JSON.parse(localStorage.getItem('blogPosts')) || [];
             const dataStr = JSON.stringify(posts, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -273,6 +248,12 @@
             URL.revokeObjectURL(url);
         }
 
+        // Save posts to localStorage and export
+        function saveAndExportPosts() {
+            localStorage.setItem('blogPosts', JSON.stringify(posts));
+            exportPosts();
+        }
+
         // Import posts from a JSON file
         function importPosts(event) {
             const file = event.target.files[0];
@@ -282,8 +263,9 @@
                     try {
                         const importedPosts = JSON.parse(e.target.result);
                         if (Array.isArray(importedPosts)) {
-                            localStorage.setItem('blogPosts', JSON.stringify(importedPosts));
-                            loadPosts();
+                            posts = importedPosts;
+                            saveAndExportPosts();
+                            renderPosts();
                             alert('Posts imported successfully!');
                         } else {
                             alert('Invalid file format. Please upload a valid JSON file.');
